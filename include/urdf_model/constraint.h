@@ -42,7 +42,7 @@ public:
   JointConstraint() { this->clear(); };
 
   /// Gear ratio
-  ///   gear_ratio = parent_velocity / child_velocity
+  ///   gear_ratio = child_velocity / parent_velocity
   double gear_ratio;
 
   void clear()
@@ -57,11 +57,21 @@ class LoopConstraint : public Constraint
 public:
   LoopConstraint() { this->clear(); };
 
-  // TODO(@MatthewChignoli): Add info about axes and constraint locations later
+  /// transform from Parent/Child Link frame to the respective Constraints frames on each link
+  Pose parent_to_constraint_origin_transform;
+  Pose child_to_constraint_origin_transform;
+ 
+  /// indicate which axis or axes are constrained
+  Vector3 position_axis;
+  Vector3 rotation_axis;
 
   void clear()
   {
     Constraint::clear();
+    this->parent_to_constraint_origin_transform.clear();
+    this->child_to_constraint_origin_transform.clear();
+    this->position_axis.clear();
+    this->rotation_axis.clear();
   };
 };
 
