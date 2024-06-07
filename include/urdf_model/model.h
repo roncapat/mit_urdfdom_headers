@@ -39,6 +39,7 @@
 
 #include <string>
 #include <map>
+#include <algorithm>
 #include <urdf_model/link.h>
 #include <urdf_model/types.h>
 #include <urdf_exception/exception.h>
@@ -66,6 +67,16 @@ public:
       ptr.reset();
     else
       ptr = this->joints_.find(name)->second;
+    return ptr;
+  };
+
+  ConstraintConstSharedPtr getConstraint(const std::string& name) const
+  {
+    ConstraintConstSharedPtr ptr;
+    if (this->constraints_.find(name) == this->constraints_.end())
+      ptr.reset();
+    else
+      ptr = this->constraints_.find(name)->second;
     return ptr;
   };
   
@@ -153,6 +164,66 @@ public:
         parent_link_tree[child_link->name] = parent_link_name;
       }
     }
+
+    // loop through all constraints, for every link, assign children links and children constraints
+    for (std::map<std::string, ConstraintSharedPtr>::iterator constraint = this->constraints_.begin();constraint != this->constraints_.end(); constraint++)
+    {
+      std::string parent_link_name = constraint->second->parent_link_name;
+      std::string child_link_name = constraint->second->child_link_name;
+      
+      if (parent_link_name.empty() || child_link_name.empty())
+      {
+        throw ParseError("Constraint [" + constraint->second->name + "] is missing a parent and/or child link specification.");
+      }
+      else
+      {
+        // find child and parent links
+        LinkSharedPtr child_link, parent_link;
+        this->getLink(child_link_name, child_link);
+        if (!child_link)
+        {
+          throw ParseError("child link [" + child_link_name + "] of constraint [" + constraint->first + "] not found");
+        }
+        this->getLink(parent_link_name, parent_link);
+        if (!parent_link)
+        {
+          throw ParseError("parent link [" + parent_link_name + "] of constraint [" + constraint->first + "] not found.  This is not valid according to the URDF spec. Every link you refer to from a constraint needs to be explicitly defined in the robot description. To fix this problem you can either remove this constraint [" + constraint->first + "] from your urdf file, or add \"<link name=\"" + parent_link_name + "\" />\" to your urdf file.");
+        }
+
+        // set constraint for parent link
+        parent_link->constraints.push_back(constraint->second);
+
+        // set loop links
+        auto getSubtree = [](LinkSharedPtr link) -> std::vector<LinkSharedPtr>
+        {
+          std::vector<LinkSharedPtr> subtree;
+          while (link)
+          {
+            subtree.push_back(link);
+            link = link->getParent();
+          }
+          std::reverse(subtree.begin(), subtree.end());
+          return subtree;
+        };
+        std::vector<LinkSharedPtr> parent_subtree = getSubtree(parent_link);
+        std::vector<LinkSharedPtr> child_subtree = getSubtree(child_link);
+
+        LinkSharedPtr ancestor;
+        std::vector<std::shared_ptr<Link>>::iterator parent_it = parent_subtree.begin();
+        std::vector<std::shared_ptr<Link>>::iterator child_it = child_subtree.begin();
+        while (parent_it != parent_subtree.end() &&
+               child_it != child_subtree.end() &&
+               *parent_it == *child_it)
+        {
+          ancestor = *parent_it;
+          parent_it++;
+          child_it++;
+        }
+        parent_link->loop_links.push_back(*child_it);
+        child_link->loop_links.push_back(*parent_it);
+
+      }
+    }
   }
   
   void initRoot(const std::map<std::string, std::string> &parent_link_tree)
@@ -188,6 +259,8 @@ public:
   std::map<std::string, LinkSharedPtr> links_;
   /// \brief complete list of Joints
   std::map<std::string, JointSharedPtr> joints_;
+  /// \brief complete list of Constraints
+  std::map<std::string, ConstraintSharedPtr> constraints_;
   /// \brief complete list of Materials
   std::map<std::string, MaterialSharedPtr> materials_;
 

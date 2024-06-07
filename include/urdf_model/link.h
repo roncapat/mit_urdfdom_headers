@@ -42,6 +42,7 @@
 #include <map>
 
 #include "joint.h"
+#include "constraint.h"
 #include "color.h"
 #include "types.h"
 
@@ -214,6 +215,9 @@ public:
 
   std::vector<JointSharedPtr> child_joints;
   std::vector<LinkSharedPtr> child_links;
+
+  std::vector<ConstraintSharedPtr> constraints;
+  std::vector<LinkSharedPtr> loop_links;
 
   LinkSharedPtr getParent() const
   {return parent_link_.lock();};
