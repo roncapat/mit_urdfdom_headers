@@ -219,6 +219,7 @@ public:
           parent_it++;
           child_it++;
         }
+        constraint->second->nearest_common_ancestor_name = ancestor->name;
         parent_link->loop_links.push_back(*child_it);
         child_link->loop_links.push_back(*parent_it);
 

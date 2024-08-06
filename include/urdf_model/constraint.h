@@ -18,7 +18,13 @@ public:
 
   Constraint() { this->clear(); };
 
+  virtual ~Constraint() = default;
+
   std::string name;
+  enum
+  {
+    UNKNOWN, JOINT, LOOP
+  } type;
 
   /// child Link element
   ///   child link frame is the same as the Joint frame
@@ -27,6 +33,10 @@ public:
   /// parent Link element
   ///   origin specifies the transform from Parent Link to Joint Frame
   std::string parent_link_name;
+
+  /// nearest common ancestor
+  ///   the nearest link that is an ancestor of both the child and parent links
+  std::string nearest_common_ancestor_name;
 
   void clear()
   {
@@ -39,7 +49,11 @@ public:
 class JointConstraint : public Constraint
 {
 public:
-  JointConstraint() { this->clear(); };
+  JointConstraint()
+  {
+    this->clear();
+    this->type = JOINT;
+  };
 
   /// Gear ratio
   ///   gear_ratio = child_velocity / parent_velocity
@@ -55,7 +69,11 @@ public:
 class LoopConstraint : public Constraint
 {
 public:
-  LoopConstraint() { this->clear(); };
+  LoopConstraint()
+  {
+    this->clear();
+    this->type = LOOP;
+  };
 
   /// transform from Parent/Child Link frame to the respective Constraints frames on each link
   Pose parent_to_constraint_origin_transform;
