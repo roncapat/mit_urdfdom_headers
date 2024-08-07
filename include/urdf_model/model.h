@@ -166,16 +166,16 @@ public:
     }
 
     // loop through all constraints, for every link, assign loop links and ancestors
-    auto getSubtree = [](LinkSharedPtr link) -> std::vector<LinkSharedPtr>
+    auto getSubchain = [](LinkSharedPtr link) -> std::vector<LinkSharedPtr>
     {
-      std::vector<LinkSharedPtr> subtree;
+      std::vector<LinkSharedPtr> subchain;
       while (link)
       {
-        subtree.push_back(link);
+        subchain.push_back(link);
         link = link->getParent();
       }
-      std::reverse(subtree.begin(), subtree.end());
-      return subtree;
+      std::reverse(subchain.begin(), subchain.end());
+      return subchain;
     };
 
     for (std::map<std::string, ConstraintSharedPtr>::iterator constraint = this->constraints_.begin();constraint != this->constraints_.end(); constraint++)
@@ -206,14 +206,14 @@ public:
         predecessor_link->constraints.push_back(constraint->second);
 
         // set loop links
-        std::vector<LinkSharedPtr> predecessor_subtree = getSubtree(predecessor_link);
-        std::vector<LinkSharedPtr> successor_subtree = getSubtree(successor_link);
+        std::vector<LinkSharedPtr> predecessor_subchain = getSubchain(predecessor_link);
+        std::vector<LinkSharedPtr> successor_subchain = getSubchain(successor_link);
 
         LinkSharedPtr ancestor;
-        std::vector<std::shared_ptr<Link>>::iterator predecessor_it = predecessor_subtree.begin();
-        std::vector<std::shared_ptr<Link>>::iterator successor_it = successor_subtree.begin();
-        while (predecessor_it != predecessor_subtree.end() &&
-               successor_it != successor_subtree.end() &&
+        std::vector<std::shared_ptr<Link>>::iterator predecessor_it = predecessor_subchain.begin();
+        std::vector<std::shared_ptr<Link>>::iterator successor_it = successor_subchain.begin();
+        while (predecessor_it != predecessor_subchain.end() &&
+               successor_it != successor_subchain.end() &&
                *predecessor_it == *successor_it)
         {
           ancestor = *predecessor_it;
