@@ -15,7 +15,6 @@ namespace urdf{
 class Constraint
 {
 public:
-
   Constraint() { this->clear(); };
 
   virtual ~Constraint() = default;
@@ -23,16 +22,16 @@ public:
   std::string name;
   enum
   {
-    UNKNOWN, JOINT, LOOP
-  } type;
+    UNKNOWN, LOOP, COUPLING
+  } class_type;
 
-  /// child Link element
-  ///   child link frame is the same as the Joint frame
-  std::string child_link_name;
+  /// successor Link element
+  ///   successor link frame is the same as the Loop frame
+  std::string successor_link_name;
 
-  /// parent Link element
-  ///   origin specifies the transform from Parent Link to Joint Frame
-  std::string parent_link_name;
+  /// predecessor Link element
+  ///   origin specifies the transform from Predecessor Link to Loop Frame
+  std::string predecessor_link_name;
 
   /// nearest common ancestor
   ///   the nearest link that is an ancestor of both the child and parent links
@@ -40,29 +39,30 @@ public:
 
   void clear()
   {
-    this->child_link_name.clear();
-    this->parent_link_name.clear();
+    this->successor_link_name.clear();
+    this->predecessor_link_name.clear();
+    this->nearest_common_ancestor_name.clear();
+    this->class_type = UNKNOWN;
   };
 };
 
-// TODO(@MatthewChignoli): How to deal with differentials?
-class JointConstraint : public Constraint
+class CouplingConstraint : public Constraint
 {
 public:
-  JointConstraint()
+  CouplingConstraint()
   {
     this->clear();
-    this->type = JOINT;
+    this->class_type = COUPLING;
   };
 
-  /// Gear ratio
-  ///   gear_ratio = child_velocity / parent_velocity
-  double gear_ratio;
+  /// Ratio
+  ///   ratio = child_velocity / parent_velocity
+  double ratio;
 
   void clear()
   {
     Constraint::clear();
-    this->gear_ratio = 1.0;
+    this->ratio = 1.0;
   };
 };
 
@@ -72,24 +72,36 @@ public:
   LoopConstraint()
   {
     this->clear();
-    this->type = LOOP;
+    this->class_type = LOOP;
   };
 
-  /// transform from Parent/Child Link frame to the respective Constraints frames on each link
-  Pose parent_to_constraint_origin_transform;
-  Pose child_to_constraint_origin_transform;
- 
-  /// indicate which axis or axes are constrained
-  Vector3 position_axis;
-  Vector3 rotation_axis;
+  enum
+  {
+    UNKNOWN, REVOLUTE, CONTINUOUS, PRISMATIC, PLANAR, FIXED
+  } type;
+
+  /// \brief     type_       meaning of axis_
+  /// ------------------------------------------------------
+  ///            UNKNOWN     unknown type
+  ///            REVOLUTE    rotation axis
+  ///            PRISMATIC   translation axis
+  ///            PLANAR      plane normal axis
+  ///            FIXED       N/A
+  Vector3 axis;
+
+  /// transform from Successor Link frame to Loop frame
+  Pose  successor_to_joint_origin_transform;
+
+  /// transform from Predecessor Link frame to Loop frame
+  Pose  predecessor_to_joint_origin_transform;
 
   void clear()
   {
     Constraint::clear();
-    this->parent_to_constraint_origin_transform.clear();
-    this->child_to_constraint_origin_transform.clear();
-    this->position_axis.clear();
-    this->rotation_axis.clear();
+    this->axis.clear();
+    this->predecessor_to_joint_origin_transform.clear();
+    this->successor_to_joint_origin_transform.clear();
+    this->type = UNKNOWN;
   };
 };
 

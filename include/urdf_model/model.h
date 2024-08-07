@@ -165,63 +165,64 @@ public:
       }
     }
 
-    // loop through all constraints, for every link, assign children links and children constraints
+    // loop through all constraints, for every link, assign loop links and ancestors
+    auto getSubtree = [](LinkSharedPtr link) -> std::vector<LinkSharedPtr>
+    {
+      std::vector<LinkSharedPtr> subtree;
+      while (link)
+      {
+        subtree.push_back(link);
+        link = link->getParent();
+      }
+      std::reverse(subtree.begin(), subtree.end());
+      return subtree;
+    };
+
     for (std::map<std::string, ConstraintSharedPtr>::iterator constraint = this->constraints_.begin();constraint != this->constraints_.end(); constraint++)
     {
-      std::string parent_link_name = constraint->second->parent_link_name;
-      std::string child_link_name = constraint->second->child_link_name;
+      std::string predecessor_link_name = constraint->second->successor_link_name;
+      std::string successor_link_name = constraint->second->predecessor_link_name;
       
-      if (parent_link_name.empty() || child_link_name.empty())
+      if (predecessor_link_name.empty() || successor_link_name.empty())
       {
-        throw ParseError("Constraint [" + constraint->second->name + "] is missing a parent and/or child link specification.");
+        throw ParseError("Constraint [" + constraint->second->name + "] is missing a predecessor and/or successor link specification.");
       }
       else
       {
-        // find child and parent links
-        LinkSharedPtr child_link, parent_link;
-        this->getLink(child_link_name, child_link);
-        if (!child_link)
+        // find successor and predecessor links
+        LinkSharedPtr successor_link, predecessor_link;
+        this->getLink(successor_link_name, successor_link);
+        if (!successor_link)
         {
-          throw ParseError("child link [" + child_link_name + "] of constraint [" + constraint->first + "] not found");
+          throw ParseError("successor link [" + successor_link_name + "] of constraint [" + constraint->first + "] not found");
         }
-        this->getLink(parent_link_name, parent_link);
-        if (!parent_link)
+        this->getLink(predecessor_link_name, predecessor_link);
+        if (!predecessor_link)
         {
-          throw ParseError("parent link [" + parent_link_name + "] of constraint [" + constraint->first + "] not found.  This is not valid according to the URDF spec. Every link you refer to from a constraint needs to be explicitly defined in the robot description. To fix this problem you can either remove this constraint [" + constraint->first + "] from your urdf file, or add \"<link name=\"" + parent_link_name + "\" />\" to your urdf file.");
+          throw ParseError("predecessor link [" + predecessor_link_name + "] of constraint [" + constraint->first + "] not found.  This is not valid according to the URDF spec. Every link you refer to from a constraint needs to be explicitly defined in the robot description. To fix this problem you can either remove this constraint [" + constraint->first + "] from your urdf file, or add \"<link name=\"" + predecessor_link_name + "\" />\" to your urdf file.");
         }
 
-        // set constraint for parent link
-        parent_link->constraints.push_back(constraint->second);
+        // set constraint for predecessor link
+        predecessor_link->constraints.push_back(constraint->second);
 
         // set loop links
-        auto getSubtree = [](LinkSharedPtr link) -> std::vector<LinkSharedPtr>
-        {
-          std::vector<LinkSharedPtr> subtree;
-          while (link)
-          {
-            subtree.push_back(link);
-            link = link->getParent();
-          }
-          std::reverse(subtree.begin(), subtree.end());
-          return subtree;
-        };
-        std::vector<LinkSharedPtr> parent_subtree = getSubtree(parent_link);
-        std::vector<LinkSharedPtr> child_subtree = getSubtree(child_link);
+        std::vector<LinkSharedPtr> predecessor_subtree = getSubtree(predecessor_link);
+        std::vector<LinkSharedPtr> successor_subtree = getSubtree(successor_link);
 
         LinkSharedPtr ancestor;
-        std::vector<std::shared_ptr<Link>>::iterator parent_it = parent_subtree.begin();
-        std::vector<std::shared_ptr<Link>>::iterator child_it = child_subtree.begin();
-        while (parent_it != parent_subtree.end() &&
-               child_it != child_subtree.end() &&
-               *parent_it == *child_it)
+        std::vector<std::shared_ptr<Link>>::iterator predecessor_it = predecessor_subtree.begin();
+        std::vector<std::shared_ptr<Link>>::iterator successor_it = successor_subtree.begin();
+        while (predecessor_it != predecessor_subtree.end() &&
+               successor_it != successor_subtree.end() &&
+               *predecessor_it == *successor_it)
         {
-          ancestor = *parent_it;
-          parent_it++;
-          child_it++;
+          ancestor = *predecessor_it;
+          predecessor_it++;
+          successor_it++;
         }
         constraint->second->nearest_common_ancestor_name = ancestor->name;
-        parent_link->loop_links.push_back(*child_it);
-        child_link->loop_links.push_back(*parent_it);
+        predecessor_link->loop_links.push_back(*successor_it);
+        successor_link->loop_links.push_back(*predecessor_it);
 
       }
     }
