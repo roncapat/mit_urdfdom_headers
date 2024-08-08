@@ -195,6 +195,9 @@ public:
   /// transform from Parent Link frame to Joint frame
   Pose  parent_to_joint_origin_transform;
 
+  /// indicates whether the joint's coorindates should be included in the independent coordinates
+  bool independent;
+
   /// Joint Dynamics
   JointDynamicsSharedPtr dynamics;
 

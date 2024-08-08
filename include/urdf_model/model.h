@@ -39,7 +39,10 @@
 
 #include <string>
 #include <map>
+#include <stack>
+#include <algorithm>
 #include <urdf_model/link.h>
+#include <urdf_model/cluster.h>
 #include <urdf_model/types.h>
 #include <urdf_exception/exception.h>
 
@@ -66,6 +69,16 @@ public:
       ptr.reset();
     else
       ptr = this->joints_.find(name)->second;
+    return ptr;
+  };
+
+  ConstraintConstSharedPtr getConstraint(const std::string& name) const
+  {
+    ConstraintConstSharedPtr ptr;
+    if (this->constraints_.find(name) == this->constraints_.end())
+      ptr.reset();
+    else
+      ptr = this->constraints_.find(name)->second;
     return ptr;
   };
   
@@ -109,6 +122,37 @@ public:
       ptr = this->materials_.find(name)->second;
     return ptr;
   };
+
+  void dfsFirstPass(const std::string &link_name,
+                    std::map<std::string, bool> &visited,
+                    std::stack<std::string> &finishing_order)
+  {
+    visited[link_name] = true;
+    for (LinkSharedPtr &child : this->links_[link_name]->child_links)
+    {
+      if (visited[child->name]) { continue; }
+      dfsFirstPass(child->name, visited, finishing_order);
+    }
+    for (LinkSharedPtr &loop_link : this->links_[link_name]->loop_links)
+    {
+      if (visited[loop_link->name]) { continue; }
+      dfsFirstPass(loop_link->name, visited, finishing_order);
+    }
+    finishing_order.push(link_name);
+  }
+
+  void dfsSecondPass(const std::map<std::string, std::vector<LinkSharedPtr>> &reverse_graph,
+                  const std::string &link_name, std::map<std::string, bool> &visited,
+                  std::vector<LinkSharedPtr> &scc)
+  {
+    visited[link_name] = true;
+    scc.push_back(this->links_[link_name]);
+    for (const LinkSharedPtr &reverse_child : reverse_graph.at(link_name))
+    {
+      if (visited[reverse_child->name]) { continue; }
+      dfsSecondPass(reverse_graph, reverse_child->name, visited, scc);
+    }
+  }
   
   void initTree(std::map<std::string, std::string> &parent_link_tree)
   {
@@ -153,8 +197,141 @@ public:
         parent_link_tree[child_link->name] = parent_link_name;
       }
     }
+
+    // loop through all constraints, for every link, assign loop links and ancestors
+    auto getSubchain = [](LinkSharedPtr link) -> std::vector<LinkSharedPtr>
+    {
+      std::vector<LinkSharedPtr> subchain;
+      while (link)
+      {
+        subchain.push_back(link);
+        link = link->getParent();
+      }
+      std::reverse(subchain.begin(), subchain.end());
+      return subchain;
+    };
+
+    for (std::map<std::string, ConstraintSharedPtr>::iterator constraint = this->constraints_.begin();constraint != this->constraints_.end(); constraint++)
+    {
+      std::string predecessor_link_name = constraint->second->successor_link_name;
+      std::string successor_link_name = constraint->second->predecessor_link_name;
+      
+      if (predecessor_link_name.empty() || successor_link_name.empty())
+      {
+        throw ParseError("Constraint [" + constraint->second->name + "] is missing a predecessor and/or successor link specification.");
+      }
+      else
+      {
+        // find successor and predecessor links
+        LinkSharedPtr successor_link, predecessor_link;
+        this->getLink(successor_link_name, successor_link);
+        if (!successor_link)
+        {
+          throw ParseError("successor link [" + successor_link_name + "] of constraint [" + constraint->first + "] not found");
+        }
+        this->getLink(predecessor_link_name, predecessor_link);
+        if (!predecessor_link)
+        {
+          throw ParseError("predecessor link [" + predecessor_link_name + "] of constraint [" + constraint->first + "] not found.  This is not valid according to the URDF spec. Every link you refer to from a constraint needs to be explicitly defined in the robot description. To fix this problem you can either remove this constraint [" + constraint->first + "] from your urdf file, or add \"<link name=\"" + predecessor_link_name + "\" />\" to your urdf file.");
+        }
+
+        // set constraint for predecessor link
+        predecessor_link->constraints.push_back(constraint->second);
+
+        // set loop links
+        std::vector<LinkSharedPtr> predecessor_subchain = getSubchain(predecessor_link);
+        std::vector<LinkSharedPtr> successor_subchain = getSubchain(successor_link);
+
+        LinkSharedPtr ancestor;
+        std::vector<LinkSharedPtr>::iterator predecessor_it = predecessor_subchain.begin();
+        std::vector<LinkSharedPtr>::iterator successor_it = successor_subchain.begin();
+        while (predecessor_it != predecessor_subchain.end() &&
+               successor_it != successor_subchain.end() &&
+               *predecessor_it == *successor_it)
+        {
+          ancestor = *predecessor_it;
+          predecessor_it++;
+          successor_it++;
+        }
+        constraint->second->nearest_common_ancestor_name = ancestor->name;
+        predecessor_link->loop_links.push_back(*successor_it);
+        successor_link->loop_links.push_back(*predecessor_it);
+
+      }
+    }
+
+    // Extract strongly connected components
+    {
+      std::map<std::string, bool> visited;
+      std::stack<std::string> finishing_order;
+
+      // Build the reverse graph
+      std::map<std::string, std::vector<LinkSharedPtr>> reverse_link_graph;
+      for (std::map<std::string, LinkSharedPtr>::iterator link = this->links_.begin(); link != this->links_.end(); link++)
+      {
+        reverse_link_graph[link->second->name] = std::vector<LinkSharedPtr>();
+      }
+      for (std::map<std::string, LinkSharedPtr>::iterator link = this->links_.begin(); link != this->links_.end(); link++)
+      {
+        for (LinkSharedPtr &child : link->second->child_links)
+        {
+          reverse_link_graph[child->name].push_back(link->second);
+        }
+        for (LinkSharedPtr &loop_link : link->second->loop_links)
+        {
+          reverse_link_graph[loop_link->name].push_back(link->second);
+        }
+      }
+
+      // First Pass: Calculate finishing times
+      for (std::map<std::string, LinkSharedPtr>::iterator link = this->links_.begin(); link != this->links_.end(); link++)
+      {
+        if (visited[link->first]) { continue; }
+        dfsFirstPass(link->first, visited, finishing_order);
+      }
+      visited.clear();
+
+      // Second Pass: Find strongly connected components
+      while (!finishing_order.empty())
+      {
+        std::string link_name = finishing_order.top();
+        finishing_order.pop();
+
+        if (visited[link_name]) { continue; }
+
+        std::vector<LinkSharedPtr> scc;
+        dfsSecondPass(reverse_link_graph, link_name, visited, scc);
+
+        // Create a new cluster
+        ClusterSharedPtr cluster;
+        cluster.reset(new Cluster());
+
+        size_t cluster_id = this->clusters_.size();
+        this->clusters_.insert(std::make_pair(cluster_id, cluster));
+
+        for (LinkSharedPtr &link : scc)
+        {
+          cluster->push_back(link);
+          this->containing_cluster_.insert(std::make_pair(link->name, cluster_id));
+        }
+      }
+
+      // Set parent and child clusters
+      for (std::map<int, ClusterSharedPtr>::iterator cluster = this->clusters_.begin(); cluster != this->clusters_.end(); cluster++)
+      {
+        for (LinkSharedPtr &link : *cluster->second)
+        {
+          LinkSharedPtr parent_link = link->getParent();
+          if (!parent_link) { continue; }
+          int parent_cluster_id = this->containing_cluster_[parent_link->name];
+          if (parent_cluster_id == cluster->first) { continue; }
+          cluster->second->setParent(this->clusters_[parent_cluster_id]);
+          this->clusters_[parent_cluster_id]->child_clusters.push_back(cluster->second);
+        }
+      }
+    }
   }
-  
+
   void initRoot(const std::map<std::string, std::string> &parent_link_tree)
   { 
     this->root_link_.reset();
@@ -186,8 +363,14 @@ public:
   
   /// \brief complete list of Links
   std::map<std::string, LinkSharedPtr> links_;
+  /// \brief maps the name of a link to the cluster that contains it
+  std::map<std::string, int> containing_cluster_;
+  /// \brief complete list of Clusters
+  std::map<int, ClusterSharedPtr> clusters_;
   /// \brief complete list of Joints
   std::map<std::string, JointSharedPtr> joints_;
+  /// \brief complete list of Constraints
+  std::map<std::string, ConstraintSharedPtr> constraints_;
   /// \brief complete list of Materials
   std::map<std::string, MaterialSharedPtr> materials_;
 
