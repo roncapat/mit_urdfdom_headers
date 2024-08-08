@@ -31,7 +31,6 @@ public:
 
 private:
   ClusterWeakPtr parent_cluster_;
-
 };
 
 }

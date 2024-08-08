@@ -56,7 +56,7 @@ public:
   };
 
   /// Ratio
-  ///   ratio = child_velocity / parent_velocity
+  ///   ratio = successor velocity / predecessor velocity
   double ratio;
 
   void clear()
