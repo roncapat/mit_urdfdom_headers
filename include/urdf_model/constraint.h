@@ -15,7 +15,7 @@ namespace urdf{
 class Constraint
 {
 public:
-  Constraint() { this->clear(); };
+  Constraint() { clear(); };
 
   virtual ~Constraint() = default;
 
@@ -39,10 +39,10 @@ public:
 
   void clear()
   {
-    this->successor_link_name.clear();
-    this->predecessor_link_name.clear();
-    this->nearest_common_ancestor_name.clear();
-    this->class_type = UNKNOWN;
+    successor_link_name.clear();
+    predecessor_link_name.clear();
+    nearest_common_ancestor_name.clear();
+    class_type = UNKNOWN;
   };
 };
 
@@ -52,7 +52,6 @@ public:
   CouplingConstraint()
   {
     this->clear();
-    this->class_type = COUPLING;
   };
 
   /// Ratio
@@ -63,6 +62,7 @@ public:
   {
     Constraint::clear();
     this->ratio = 1.0;
+    this->class_type = COUPLING;
   };
 };
 
@@ -72,7 +72,6 @@ public:
   LoopConstraint()
   {
     this->clear();
-    this->class_type = LOOP;
   };
 
   enum
@@ -90,18 +89,18 @@ public:
   Vector3 axis;
 
   /// transform from Successor Link frame to Loop frame
-  Pose  successor_to_joint_origin_transform;
+  Pose  successor_to_constraint_origin_transform;
 
   /// transform from Predecessor Link frame to Loop frame
-  Pose  predecessor_to_joint_origin_transform;
+  Pose  predecessor_to_constraint_origin_transform;
 
   void clear()
   {
     Constraint::clear();
     this->axis.clear();
-    this->predecessor_to_joint_origin_transform.clear();
-    this->successor_to_joint_origin_transform.clear();
-    this->type = UNKNOWN;
+    this->predecessor_to_constraint_origin_transform.clear();
+    this->successor_to_constraint_origin_transform.clear();
+    this->class_type = LOOP;
   };
 };
 
