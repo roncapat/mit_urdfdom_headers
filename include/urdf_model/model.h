@@ -72,6 +72,19 @@ public:
     return ptr;
   };
 
+  ClusterConstSharedPtr getContainingCluster(const std::string &link_name) const
+  {
+    ClusterConstSharedPtr ptr;
+    if (this->containing_cluster_.find(link_name) == this->containing_cluster_.end())
+      ptr.reset();
+    else
+    {
+      const int i = this->containing_cluster_.find(link_name)->second;
+      ptr = this->clusters_.at(i);
+    }
+    return ptr;
+  };
+
   ConstraintConstSharedPtr getConstraint(const std::string& name) const
   {
     ConstraintConstSharedPtr ptr;
@@ -327,6 +340,7 @@ public:
           if (parent_cluster_id == cluster->first) { continue; }
           cluster->second->setParent(this->clusters_[parent_cluster_id]);
           this->clusters_[parent_cluster_id]->child_clusters.push_back(cluster->second);
+          break;
         }
       }
     }
